@@ -368,7 +368,6 @@ public class ConferenceApi {
                         profile.addToConferenceKeysToAttend(websafeConferenceKey);
 
                         // TODO
-                        profile.addToConferenceKeysToAttend(websafeConferenceKey);
                         // Decrease the conference's seatsAvailable
                         // You can use the bookSeats() method on Conference
                         conference.bookSeats(1);
