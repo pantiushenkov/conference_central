@@ -9,8 +9,14 @@ import com.google.api.server.spi.config.ApiMethod.HttpMethod;
 import com.google.api.server.spi.response.ConflictException;
 import com.google.api.server.spi.response.ForbiddenException;
 import com.google.api.server.spi.response.UnauthorizedException;
+import com.google.appengine.api.memcache.MemcacheService;
+import com.google.appengine.api.memcache.MemcacheServiceFactory;
+import com.google.appengine.api.taskqueue.Queue;
+import com.google.appengine.api.taskqueue.QueueFactory;
+import com.google.appengine.api.taskqueue.TaskOptions;
 import com.google.appengine.api.users.User;
 import com.google.devrel.training.conference.Constants;
+import com.google.devrel.training.conference.domain.Announcement;
 import com.google.devrel.training.conference.domain.Conference;
 import com.google.devrel.training.conference.domain.Profile;
 import com.google.devrel.training.conference.form.ConferenceForm;
@@ -26,6 +32,7 @@ import com.google.api.server.spi.response.NotFoundException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Objects;
 
 import com.googlecode.objectify.Work;
 import com.googlecode.objectify.cmd.Query;
@@ -314,7 +321,7 @@ public class ConferenceApi {
             httpMethod = HttpMethod.POST
     )
 
-    public WrappedBoolean registerForConference_SKELETON(final User user,
+    public WrappedBoolean registerForConference(final User user,
                                                          @Named("websafeConferenceKey") final String websafeConferenceKey)
             throws UnauthorizedException, NotFoundException,
             ForbiddenException, ConflictException {
@@ -326,6 +333,7 @@ public class ConferenceApi {
         // Get the userId
         final String userId = user.getUserId();
 
+        final Queue queue = QueueFactory.getDefaultQueue();
         // TODO
         // Start transaction
         WrappedBoolean result = ofy().transact(new Work<WrappedBoolean>() {
@@ -364,7 +372,7 @@ public class ConferenceApi {
 
                         // TODO
                         // Add the websafeConferenceKey to the profile's
-                        // conferencesToAttend property
+                        // conferencesToAttend propert y
                         profile.addToConferenceKeysToAttend(websafeConferenceKey);
 
                         // TODO
@@ -375,6 +383,8 @@ public class ConferenceApi {
                         // TODO
                         // Save the Conference and Profile entities
                         ofy().save().entities(conference, profile).now();
+                        queue.add(ofy().getTransaction(),
+                                TaskOptions.Builder.withUrl("/tasks/send_confirmation_email").param("email", profile.getMainEmail()).param("conferenceInfo", conference.toString()));
                         // We are booked!
                         return new WrappedBoolean(true, "Registration successful");
                     }
@@ -440,5 +450,18 @@ public class ConferenceApi {
         // Conference entities that the user has registered to atend
 
         return collection;
+    }
+
+    @ApiMethod(
+            name = "getAnnouncements",
+            path = "announcements",
+            httpMethod = HttpMethod.GET
+    )
+    public Announcement getAnnouncements() {
+        MemcacheService memcacheService = MemcacheServiceFactory.getMemcacheService();
+        Object announcement = memcacheService.get(Constants.MEMCACHE_ANNOUNCEMENTS_KEY);
+        if (announcement != null)
+            return new Announcement(announcement.toString());
+        else return null;
     }
 }
